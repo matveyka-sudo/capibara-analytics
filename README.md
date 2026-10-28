@@ -96,3 +96,19 @@ http://localhost:8080).
 
 **Загрузка падает на `ModuleNotFoundError: psycopg2`.** Поставьте вручную:
 `pip install psycopg2-binary`
+
+
+## Модель Capibara
+
+Вся реализация находится в [model/](model/README.md). При уже загруженном raw:
+
+```bash
+python3 model/run.py --check
+```
+
+Команда собирает core/mart, проверяет контрольные значения из `docs/tasks.md`,
+показывает пять коротких ответов с числами и сохраняет подробные CSV
+в `model/results/`. Для вывода всех строк добавьте `--details`.
+Исходные CSV и raw не меняются. Повторно запускать setup.sh для проверки не нужно.
+Подключение, решения по модели, концепция дашборда и развитие описаны
+в [model/README.md](model/README.md).

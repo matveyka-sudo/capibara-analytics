@@ -1,0 +1,39 @@
+Capibara core v2.1 — успешная сборка
+Время UTC: 2026-10-28T11:44:45.937590+00:00
+Сервер: PostgreSQL 16.15 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+Проверки типов, ключей, связей и сохранности строк/сумм: OK
+Исторические контрольные значения Olist: OK
+
+1. Продажи за период: 13221498.11; доставленных заказов: 96478; месяцев: 24.
+2. Первый продавец: 4869f7a5dfa277a7dca6462dcf3b52b2 (guariba, SP); выручка: 226987.93; заказов: 1124; единиц: 1148.
+3. Средний чек с доставкой: 159.88; строк/единиц на заказ: 1.142198221356.
+4. Покупателей: 96096; повторных: 2997; доля: 3.12%.
+5. Категорий: 74; общая выручка: 13221498.11; крупнейшая: beleza_saude — 1233131.72.
+
+Строки и отпечатки таблиц (включая source metadata):
+core.buyer: 96096; fd73718c4a44706e93f938b85e18db42
+core.category: 74; 144477058d4ac3b4d02cf4d5d9e71e69
+core.customer_snapshot: 99441; e659fdcfe16f73860eb1ea79c7ee5dbd
+core.order_item: 112650; 1b9353c7b1557779bbc801e9d3815e7d
+core.order_payment: 103886; 548a69fa346830e32a6abce7c4cda56b
+core.order_review: 99224; 782db2e2ba8a9e21f6cf12fad02404e4
+core.orders: 99441; 21b321f3820b813b84bd97ab3720ebbc
+core.product: 32951; 9f97b91e6009654a549c2446f3a84cba
+core.seller: 3095; fb8b0cc31a3a754b25272f405cc59701
+raw.customers: 99441; e5c4b2937c4336b7d09462c1926b3607
+raw.order_items: 112650; 620cbd086bd840e107adb1ba5001cc55
+raw.order_payments: 103886; fe0b9d952864581dbf717a7b39dc938b
+raw.order_reviews: 99224; 5f9e50e3acda0d69c1111bd1884c7b5c
+raw.orders: 99441; a5862006a743190366f7837890612a38
+raw.product_category_translation: 71; 0efd327c76c80ed547975907502192c9
+raw.products: 32951; ed4331ebdca0a1804989ac82600e95b4
+raw.sellers: 3095; b8ced42ab7dbac2795b9c1b2e1750ef6
+
+Аномалии источника (сохранены без исправлений):
+orders_without_items: 775
+orders_without_reviews: 768
+untranslated_categories: ['pc_gamer', 'portateis_cozinha_e_preparadores_de_alimentos']
+delivered_without_payments: 1
+payment_item_value_mismatch: 639
+changed_existing_payment_keys: 0
+delivered_missing_delivery_date: 8
