@@ -1,5 +1,3 @@
-
--- 1. PostgreSQL and UUIDv5 prerequisites.
 -- Session-wide lock serializes this builder, including its migration transaction.
 SET application_name = 'capibara_builder';
 SET search_path = pg_catalog, public;
@@ -27,8 +25,6 @@ DO $$ BEGIN
   RAISE EXCEPTION 'UUIDv5 test vectors failed'; END IF;
 END $$;
 
--- 2. Core v2.1 migration; existing data is not reset here.
--- Core v2.1 initial migration. Older physical models require an explicit migration.
 BEGIN;
 CREATE SCHEMA IF NOT EXISTS analytics_meta;
 CREATE TABLE IF NOT EXISTS analytics_meta.migrations (
@@ -161,7 +157,6 @@ INSERT INTO analytics_meta.migrations(version) VALUES ('001_core_v2.1');
 \endif
 COMMIT;
 
--- 3. Verify the installed physical schema before any refresh.
 -- Fail on drift rather than treating IF NOT EXISTS as a migration.
 CREATE TEMP TABLE expected_columns(table_name text, column_name text, type_name text, required boolean, position integer);
 INSERT INTO expected_columns VALUES

@@ -1,6 +1,3 @@
-
--- 1. Check and lock the existing raw tables.
--- Inspected organizer DDL at 3da32d149bfa14dca3fdb0c5863d0771c38efbfc.
 CREATE TEMP TABLE expected_raw(table_name text,column_name text,type_name text);
 INSERT INTO expected_raw VALUES
 ('orders','order_id','text'),
@@ -74,8 +71,7 @@ END $$;
 LOCK TABLE raw.orders,raw.order_items,raw.order_payments,raw.order_reviews,raw.products,
  raw.sellers,raw.customers,raw.product_category_translation IN SHARE MODE;
 
--- 2. Strict conversions before narrowing types.
--- These helpers live only in this psql session. No persistent data-cleaning API.
+-- Validation helpers and staging tables exist only for this load.
 CREATE FUNCTION pg_temp.optional(v text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
  SELECT CASE WHEN v IS NULL OR v ~ '^[[:space:]]*$' THEN NULL ELSE v END
 $$;
@@ -140,8 +136,6 @@ BEGIN
  RETURN v;
 END $$;
 
--- 3. Stage every source row; validate keys and foreign keys.
--- Staging uses a consistent raw snapshot; never mutate raw.
 CREATE TEMP TABLE stage_customer_snapshot ON COMMIT DROP AS SELECT
     pg_temp.source_uuid(customer_id,'raw.customers.customer_id') AS customer_id,
     pg_temp.source_uuid(customer_unique_id,'raw.customers.customer_unique_id') AS buyer_id,
@@ -214,7 +208,7 @@ CREATE TEMP TABLE stage_order_review ON COMMIT DROP AS SELECT
     _source_file AS source,
     _loaded_at AS source_loaded_at
 FROM raw.order_reviews;
--- Translation keys must be nonempty and unique before joining.
+-- Validate translation keys before joining to avoid multiplying categories.
 CREATE TEMP TABLE stage_translation ON COMMIT DROP AS
 SELECT pg_temp.required_name(product_category_name,'raw.product_category_translation.product_category_name') AS category_name_pt,
        pg_temp.optional(product_category_name_english) AS category_name_en, _source_file AS source,
@@ -275,16 +269,13 @@ DO $$ BEGIN
   RAISE EXCEPTION 'Incomplete delivered orders: missing item facts; answers cannot be validated'; END IF;
 END $$;
 
--- 4. Audit payment changes under the explicit full-snapshot replacement policy.
+-- Full refresh accepts changed payment values and counts their natural keys before replacement.
 CREATE TEMP TABLE changed_payments ON COMMIT DROP AS
 SELECT s.order_id,s.payment_sequential FROM stage_order_payment s JOIN core.order_payment c
 USING(order_id,payment_sequential)
 WHERE (s.payment_type,s.installment_count,s.payment_value) IS DISTINCT FROM
       (c.payment_type,c.installment_count,c.payment_value);
 
--- 5. Replace all nine known tables inside the current transaction.
--- Explicit full-snapshot policy: validated input replaces all nine known tables.
--- Changed payment values are accepted only as part of this audited full refresh.
 TRUNCATE core.buyer, core.customer_snapshot, core.orders, core.category, core.product, core.seller, core.order_item, core.order_payment, core.order_review RESTRICT;
 INSERT INTO core.buyer SELECT * FROM stage_buyer;
 INSERT INTO core.customer_snapshot SELECT * FROM stage_customer_snapshot;

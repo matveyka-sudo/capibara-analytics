@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# Скачивает исходные CSV в папку data.
-# Источник: официальный репозиторий Olist на GitHub.
-#
-# Запуск из корня проекта:  bash scripts/download_data.sh
 
 set -euo pipefail
 
 BASE="https://raw.githubusercontent.com/olist/work-at-olist-data/master/datasets"
-# Скрипт лежит в scripts/, данные — в data/ рядом с ним на уровень выше.
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/data"
 
 FILES=(

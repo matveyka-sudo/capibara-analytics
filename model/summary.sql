@@ -1,5 +1,4 @@
--- Format the same SQL answers for the console; never use expected-result literals.
--- answer_1 ... answer_5 are temporary views of the five core-backed answer queries.
+-- Console output uses the five calculated answers, not acceptance constants.
 SELECT concat('1. Продажи за период: ',coalesce(sum(revenue),0.00),
               '; доставленных заказов: ',coalesce(sum(order_count),0),
               '; месяцев: ',count(*),'.') AS answer

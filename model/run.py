@@ -48,7 +48,6 @@ def build_sql(check=False):
 
 
 def execute(sql):
-    # Reuse the organizer's container and its configured local database account.
     container = os.environ.get('ANALYTICS_PSQL_CONTAINER', 'hack_postgres')
     options = ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1']
     env = os.environ.copy()

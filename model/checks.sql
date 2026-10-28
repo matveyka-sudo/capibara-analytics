@@ -1,5 +1,3 @@
-
--- 1. Always verify row/money conservation and mart dependencies.
 -- Compare every mapped field and every row, including preserved source metadata.
 DO $$ BEGIN IF EXISTS ((SELECT * FROM core.buyer EXCEPT ALL SELECT * FROM stage_buyer) UNION ALL (SELECT * FROM stage_buyer EXCEPT ALL SELECT * FROM core.buyer)) THEN RAISE EXCEPTION 'Source-to-core conservation failed: buyer'; END IF; END $$;
 DO $$ BEGIN IF EXISTS ((SELECT * FROM core.customer_snapshot EXCEPT ALL SELECT * FROM stage_customer_snapshot) UNION ALL (SELECT * FROM stage_customer_snapshot EXCEPT ALL SELECT * FROM core.customer_snapshot)) THEN RAISE EXCEPTION 'Source-to-core conservation failed: customer_snapshot'; END IF; END $$;
@@ -38,7 +36,6 @@ DO $$ BEGIN
  ) THEN RAISE EXCEPTION 'Unexpected mart relation dependency outside core/mart'; END IF;
 END $$;
 
--- 2. Optional controls for the reviewed Olist snapshot, enabled with --check.
 \if :reviewed_snapshot
 -- Optional acceptance controls, not permanent constraints or answer inputs.
 DO $$
@@ -91,7 +88,6 @@ END $$;
 
 \endif
 
--- 3. Read-only metadata for the human-readable validation report.
 \echo __CAPIBARA_BEGIN_report
 COPY (SELECT jsonb_build_object(
  'database_version',version(), 'server_version_num',current_setting('server_version_num'),

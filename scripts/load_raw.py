@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""
-Загрузка сырых CSV в схему raw.
-
-Что делает:
-  1. Создаёт схемы и таблицы raw-слоя (init/01_init.sql и init/02_raw_ddl.sql).
-  2. Очищает таблицы raw и заливает в них CSV из папки data.
-
-Скрипт идемпотентный: можно запускать сколько угодно раз, каждый запуск
-начинается с чистых таблиц raw. Схему core он не трогает, так что ваша
-модель от перезагрузки сырых данных не пострадает.
-
-Запуск из корня проекта:
-    pip install psycopg2-binary
-    python scripts/load_raw.py
-
-Другая база:
-    python scripts/load_raw.py --host localhost --port 5433 --db marketplace
-"""
+"""Load organizer CSVs into raw, replacing existing raw tables or rows."""
 
 import argparse
 import csv
@@ -31,13 +14,12 @@ except ImportError:
     sys.exit("Нет psycopg2. Установите:  pip install psycopg2-binary")
 
 
-HERE = pathlib.Path(__file__).resolve().parent   # scripts/
-ROOT = HERE.parent                                # корень проекта
+HERE = pathlib.Path(__file__).resolve().parent
+ROOT = HERE.parent
 DATA_DIR = ROOT / "data"
 INIT_DIR = HERE / "init"
 
-# Какой файл в какую таблицу и в каком порядке идут колонки.
-# Порядок колонок обязан совпадать с заголовком CSV.
+# Column order must match the source CSV header.
 MAPPING = [
     (
         "olist_orders_dataset.csv",
@@ -106,7 +88,6 @@ MAPPING = [
 
 
 def check_header(path, expected):
-    """Сверяем заголовок файла с тем, что ждёт таблица."""
     with path.open(encoding="utf-8-sig", newline="") as f:
         header = next(csv.reader(f))
     if header != expected:
@@ -123,8 +104,7 @@ def load_file(cur, path, table, columns):
 
     cur.execute(f"TRUNCATE {table}")
 
-    # Читаем в utf-8-sig: у одного из файлов в начале стоит BOM,
-    # без этого первая колонка приедет с невидимым мусором в имени.
+    # utf-8-sig removes the BOM present in one of the source files.
     with path.open(encoding="utf-8-sig", newline="") as f:
         buf = io.StringIO(f.read())
 
@@ -184,9 +164,7 @@ def main():
 
     with conn, conn.cursor() as cur:
         if not args.skip_ddl:
-            # Схемы создаём здесь, а не полагаемся на init-скрипты Docker:
-            # если папка init не смонтировалась, Postgres их не выполнит,
-            # и схем в базе не окажется.
+            # Init scripts do not rerun when a database volume already exists.
             print("  создаю схемы raw / core / mart")
             for schema in ("raw", "core", "mart"):
                 cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")

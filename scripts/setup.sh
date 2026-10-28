@@ -1,18 +1,8 @@
 #!/usr/bin/env bash
-# =====================================================================
-#  Полная установка окружения: база, схемы, сырые данные.
-#
-#  Запуск из любого места:
-#      bash scripts/setup.sh            обычная установка
-#      bash scripts/setup.sh --reset    снести базу и поставить заново
-#
-#  Скрипт проверяет каждый шаг и останавливается на первом сломанном,
-#  объясняя, что делать.
-# =====================================================================
+# Reloads raw CSVs; --reset also deletes the database volume.
 
 set -uo pipefail
 
-# Скрипт лежит в scripts/, а работать надо из корня проекта.
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPTS/.." && pwd)"
 cd "$ROOT"
@@ -29,7 +19,6 @@ step()  { echo; echo "==> $1"; }
 ok()    { echo "    ок: $1"; }
 die()   { echo; echo "ОШИБКА: $1"; echo; [ $# -gt 1 ] && echo "$2"; exit 1; }
 
-# --- 1. Docker ------------------------------------------------------
 step "Проверяю Docker"
 
 command -v docker >/dev/null 2>&1 \
@@ -49,7 +38,6 @@ else
 fi
 ok "Docker работает, команда: $DC"
 
-# --- 2. Файлы -------------------------------------------------------
 step "Проверяю файлы проекта"
 
 [ -f docker-compose.yml ] || die "в корне проекта нет docker-compose.yml" \
@@ -72,7 +60,6 @@ fi
 [ "$CSV_COUNT" -ge 8 ] || die "в папке data всё ещё $CSV_COUNT файлов вместо 8"
 ok "данные на месте: $CSV_COUNT файлов"
 
-# --- 3. Python ------------------------------------------------------
 step "Проверяю Python"
 
 if command -v python3 >/dev/null 2>&1; then PY=python3
@@ -88,7 +75,6 @@ $PY -c "import psycopg2" 2>/dev/null || {
 }
 ok "python и psycopg2 готовы"
 
-# --- 4. Контейнер ---------------------------------------------------
 if [ "$RESET" = "1" ]; then
   step "Сношу старую базу (--reset)"
   $DC --profile tools down -v --remove-orphans
@@ -96,7 +82,6 @@ if [ "$RESET" = "1" ]; then
 fi
 
 step "Поднимаю PostgreSQL"
-# Только postgres: pgadmin лежит в профиле tools и тянет лишние 400 МБ.
 $DC up -d postgres || die "не удалось запустить контейнер" \
   "Посмотрите, что пишет:  $DC logs postgres"
 
@@ -116,7 +101,6 @@ echo
 на \"5433:5432\" и запустите:  bash setup.sh --reset"
 ok "база принимает подключения"
 
-# --- 5. Загрузка ----------------------------------------------------
 step "Загружаю сырые данные в схему raw"
 
 PORT=$(awk -F'"' '/- "[0-9]+:5432"/ {split($2,a,":"); print a[1]; exit}' docker-compose.yml)
@@ -127,7 +111,6 @@ $PY scripts/load_raw.py --port "$PORT" || die "загрузка не прошл�
   - контейнер ещё не готов, подождите полминуты и повторите
   - порт 5432 занят, смотрите подсказку про 5433"
 
-# --- 6. Итог --------------------------------------------------------
 step "Проверяю, что получилось"
 
 $DC exec -T postgres psql -U hack -d marketplace -c "
