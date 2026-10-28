@@ -71,6 +71,8 @@ END $$;
 LOCK TABLE raw.orders,raw.order_items,raw.order_payments,raw.order_reviews,raw.products,
  raw.sellers,raw.customers,raw.product_category_translation IN SHARE MODE;
 
+CREATE TEMP TABLE raw_before ON COMMIT DROP AS SELECT 'orders' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.orders r UNION ALL SELECT 'order_items' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.order_items r UNION ALL SELECT 'order_payments' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.order_payments r UNION ALL SELECT 'order_reviews' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.order_reviews r UNION ALL SELECT 'products' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.products r UNION ALL SELECT 'sellers' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.sellers r UNION ALL SELECT 'customers' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.customers r UNION ALL SELECT 'product_category_translation' AS name,count(*) AS rows,md5(coalesce(string_agg(md5(to_jsonb(r)::text),'' ORDER BY md5(to_jsonb(r)::text) COLLATE "C"),'')) AS fingerprint FROM raw.product_category_translation r;
+
 -- Validation helpers and staging tables exist only for this load.
 CREATE FUNCTION pg_temp.optional(v text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
  SELECT CASE WHEN v IS NULL OR v ~ '^[[:space:]]*$' THEN NULL ELSE v END
@@ -91,6 +93,12 @@ CREATE FUNCTION pg_temp.postal(v text, label text) RETURNS varchar LANGUAGE plpg
 BEGIN
  IF pg_temp.optional(v) IS NULL THEN RETURN NULL; END IF;
  IF length(v)>5 THEN RAISE EXCEPTION 'Postal prefix too long at %: %',label,v; END IF;
+ RETURN v;
+END $$;
+CREATE FUNCTION pg_temp.state_code(v text, label text) RETURNS varchar LANGUAGE plpgsql AS $$
+BEGIN
+ IF pg_temp.optional(v) IS NULL THEN RETURN NULL; END IF;
+ IF length(v)>2 THEN RAISE EXCEPTION 'State too long at %: %',label,v; END IF;
  RETURN v;
 END $$;
 CREATE FUNCTION pg_temp.exact_numeric(v text, label text, p integer, s integer,
@@ -141,7 +149,7 @@ CREATE TEMP TABLE stage_customer_snapshot ON COMMIT DROP AS SELECT
     pg_temp.source_uuid(customer_unique_id,'raw.customers.customer_unique_id') AS buyer_id,
     pg_temp.postal(customer_zip_code_prefix,'raw.customers.customer_zip_code_prefix') AS zip_code_prefix,
     customer_city AS city,
-    customer_state AS state,
+    pg_temp.state_code(customer_state,'raw.customers '||customer_id||'.state')::varchar(2) AS state,
     _source_file AS source,
     _loaded_at AS source_loaded_at
 FROM raw.customers;
@@ -160,6 +168,8 @@ FROM raw.orders;
 CREATE TEMP TABLE stage_product ON COMMIT DROP AS SELECT
     pg_temp.source_uuid(product_id,'raw.products.product_id') AS product_id,
     public.uuid_generate_v5('e92ade3a-37ee-5319-848f-948b075be7b0'::uuid,CASE WHEN pg_temp.optional(product_category_name) IS NULL THEN 'category:unknown' ELSE 'category:pt:'||product_category_name END) AS category_id,
+    pg_temp.exact_numeric(product_name_lenght,'raw.products '||product_id||'.name_length',10,0,0,2147483647,false)::integer AS name_length,
+    pg_temp.exact_numeric(product_description_lenght,'raw.products '||product_id||'.description_length',10,0,0,2147483647,false)::integer AS description_length,
     pg_temp.exact_numeric(product_photos_qty,'raw.products.product_photos_qty',10,0,0,2147483647,false)::integer AS photo_count,
     pg_temp.exact_numeric(product_weight_g,'raw.products.product_weight_g',12,3,0,NULL,false)::numeric(12,3) AS weight_g,
     pg_temp.exact_numeric(product_length_cm,'raw.products.product_length_cm',12,3,0,NULL,false)::numeric(12,3) AS length_cm,
@@ -172,7 +182,7 @@ CREATE TEMP TABLE stage_seller ON COMMIT DROP AS SELECT
     pg_temp.source_uuid(seller_id,'raw.sellers.seller_id') AS seller_id,
     pg_temp.postal(seller_zip_code_prefix,'raw.sellers.seller_zip_code_prefix') AS zip_code_prefix,
     seller_city AS city,
-    seller_state AS state,
+    pg_temp.state_code(seller_state,'raw.sellers '||seller_id||'.state')::varchar(2) AS state,
     _source_file AS source,
     _loaded_at AS source_loaded_at
 FROM raw.sellers;
@@ -204,7 +214,7 @@ CREATE TEMP TABLE stage_order_review ON COMMIT DROP AS SELECT
     review_comment_title AS comment_title,
     review_comment_message AS comment_message,
     pg_temp.local_timestamp(review_creation_date,'raw.order_reviews.review_creation_date',false) AS created_at,
-    pg_temp.local_timestamp(review_answer_timestamp,'raw.order_reviews.review_answer_timestamp',false) AS answered_at,
+    pg_temp.local_timestamp(review_answer_timestamp,'raw.order_reviews.review_answer_timestamp',false) AS submitted_at,
     _source_file AS source,
     _loaded_at AS source_loaded_at
 FROM raw.order_reviews;
@@ -277,14 +287,14 @@ WHERE (s.payment_type,s.installment_count,s.payment_value) IS DISTINCT FROM
       (c.payment_type,c.installment_count,c.payment_value);
 
 TRUNCATE core.buyer, core.customer_snapshot, core.orders, core.category, core.product, core.seller, core.order_item, core.order_payment, core.order_review RESTRICT;
-INSERT INTO core.buyer SELECT * FROM stage_buyer;
-INSERT INTO core.customer_snapshot SELECT * FROM stage_customer_snapshot;
-INSERT INTO core.orders SELECT * FROM stage_orders;
-INSERT INTO core.category SELECT * FROM stage_category;
-INSERT INTO core.product SELECT * FROM stage_product;
-INSERT INTO core.seller SELECT * FROM stage_seller;
-INSERT INTO core.order_item SELECT * FROM stage_order_item;
-INSERT INTO core.order_payment SELECT * FROM stage_order_payment;
-INSERT INTO core.order_review SELECT * FROM stage_order_review;
+INSERT INTO core.buyer (buyer_id) SELECT buyer_id FROM stage_buyer;
+INSERT INTO core.customer_snapshot (customer_id,buyer_id,zip_code_prefix,city,state,source,source_loaded_at) SELECT customer_id,buyer_id,zip_code_prefix,city,state,source,source_loaded_at FROM stage_customer_snapshot;
+INSERT INTO core.orders (order_id,customer_id,status,purchased_at,approved_at,delivered_to_carrier_at,delivered_to_customer_at,estimated_delivery_at,source,source_loaded_at) SELECT order_id,customer_id,status,purchased_at,approved_at,delivered_to_carrier_at,delivered_to_customer_at,estimated_delivery_at,source,source_loaded_at FROM stage_orders;
+INSERT INTO core.category (category_id,category_name_pt,category_name_en,source,translation_source_loaded_at) SELECT category_id,category_name_pt,category_name_en,source,translation_source_loaded_at FROM stage_category;
+INSERT INTO core.product (product_id,category_id,photo_count,weight_g,length_cm,height_cm,width_cm,source,source_loaded_at,name_length,description_length) SELECT product_id,category_id,photo_count,weight_g,length_cm,height_cm,width_cm,source,source_loaded_at,name_length,description_length FROM stage_product;
+INSERT INTO core.seller (seller_id,zip_code_prefix,city,state,source,source_loaded_at) SELECT seller_id,zip_code_prefix,city,state,source,source_loaded_at FROM stage_seller;
+INSERT INTO core.order_item (order_item_id,order_id,item_number,product_id,seller_id,shipping_limit_at,price,freight_value,source,source_loaded_at) SELECT order_item_id,order_id,item_number,product_id,seller_id,shipping_limit_at,price,freight_value,source,source_loaded_at FROM stage_order_item;
+INSERT INTO core.order_payment (order_id,payment_sequential,payment_type,installment_count,payment_value,source,source_loaded_at) SELECT order_id,payment_sequential,payment_type,installment_count,payment_value,source,source_loaded_at FROM stage_order_payment;
+INSERT INTO core.order_review (order_id,review_id,score,comment_title,comment_message,created_at,submitted_at,source,source_loaded_at) SELECT order_id,review_id,score,comment_title,comment_message,created_at,submitted_at,source,source_loaded_at FROM stage_order_review;
 -- Refresh planner statistics before validating/reading the rebuilt marts.
 ANALYZE core.buyer, core.customer_snapshot, core.orders, core.category, core.product, core.seller, core.order_item, core.order_payment, core.order_review;

@@ -1,0 +1,9 @@
+status,order_count,order_share_percent,orders_without_items
+approved,2,0.002011,0
+canceled,625,0.628513,164
+created,5,0.005028,5
+delivered,96478,97.020344,0
+invoiced,314,0.315765,2
+processing,301,0.302692,0
+shipped,1107,1.113223,1
+unavailable,609,0.612423,603

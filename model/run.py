@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Capibara core v2.1, check it, and print five concise answers."""
+"""Build Capibara core v3.1, check it, and print ten concise answers."""
 
 import argparse
 import csv
@@ -14,10 +14,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MODEL = Path(__file__).resolve().parent
-ANSWERS = (
-    '01_monthly_sales', '02_top_sellers', '03_average_order_value',
-    '04_repeat_buyers', '05_category_revenue',
+ANSWER_REGISTRY = (
+    ('1', '01_monthly_sales'),
+    ('2', '02_top_sellers'),
+    ('3', '03_average_order_value'),
+    ('4', '04_repeat_buyers'),
+    ('5', '05_category_revenue'),
+    ('6', '06_product_price_history'),
+    ('7', '07_delivery_by_state'),
+    ('8', '08_order_statuses'),
+    ('9a', '09a_payments_by_state_2018'),
+    ('9b', '09b_payments_by_type'),
+    ('10', '10_delivery_by_review_score'),
 )
+ANSWERS = tuple(name for _, name in ANSWER_REGISTRY)
 
 
 def read_sql(name):
@@ -31,18 +41,14 @@ def export(name, query):
 
 
 def build_sql(check=False):
-    # Schema prerequisites commit separately; all refresh writes share one snapshot.
     sql = f'\\set reviewed_snapshot {"true" if check else "false"}\n'
-    sql += (MODEL / 'schema.sql').read_text(encoding='utf-8')
-    sql += '\nSET client_min_messages = warning;\nBEGIN ISOLATION LEVEL REPEATABLE READ;\n'
-    for name in ('load.sql', 'marts.sql', 'checks.sql'):
+    for name in ('schema.sql', 'load.sql', 'marts.sql'):
         sql += '\n' + (MODEL / name).read_text(encoding='utf-8')
-    for number, name in enumerate(ANSWERS, 1):
-        query = read_sql(f'answers/{name}.sql')
-        if re.search(r'\b(raw|analytics_meta|pg_temp)\s*\.', query, re.I):
-            raise RuntimeError(f'Forbidden answer dependency: {name}')
-        sql += f'\nCREATE TEMP VIEW answer_{number} AS {query};\n'
-        sql += export(name, query)
+    for number, name in ANSWER_REGISTRY:
+        sql += f'\nCREATE TEMP VIEW answer_{number} AS {read_sql(f"answers/{name}.sql")};\n'
+    sql += '\n' + (MODEL / 'checks.sql').read_text(encoding='utf-8')
+    for number, name in ANSWER_REGISTRY:
+        sql += export(name, f'SELECT * FROM answer_{number}')
     sql += export('summary', read_sql('summary.sql'))
     return sql + '\nCOMMIT;\n'
 
@@ -76,12 +82,15 @@ def parse_exports(output):
         matches = re.findall(pattern, output, flags=re.M | re.S)
         if len(matches) != 1:
             raise RuntimeError(f'Нет корректного SQL-результата: {name}')
+        rows = list(csv.reader(io.StringIO(matches[0]), strict=True))
+        if not rows or not rows[0] or any(len(row) != len(rows[0]) for row in rows[1:]):
+            raise RuntimeError(f'Некорректный CSV: {name}')
         exports[name] = matches[0]
     return exports
 
 
 def validation_text(report, summary, check):
-    lines = ['Capibara core v2.1 — успешная сборка',
+    lines = ['Capibara core v3.1 — успешная сборка',
              f'Время UTC: {datetime.now(timezone.utc).isoformat()}',
              f'Сервер: {report["database_version"]}',
              'Проверки типов, ключей, связей и сохранности строк/сумм: OK',
@@ -95,9 +104,9 @@ def validation_text(report, summary, check):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Собрать core v2.1, проверить данные и вывести пять ответов.')
+    parser = argparse.ArgumentParser(description='Собрать core v3.1, проверить данные и вывести десять ответов.')
     parser.add_argument('--check', action='store_true', help='Сверить контрольные значения снимка Olist')
-    parser.add_argument('--details', action='store_true', help='Дополнительно показать все месяцы, продавцов и категории')
+    parser.add_argument('--details', action='store_true', help='Дополнительно показать все строки одиннадцати отчётов')
     args = parser.parse_args()
     print('Собираю модель и проверяю данные PostgreSQL...', flush=True)
     exports = parse_exports(execute(build_sql(args.check)))
@@ -115,7 +124,7 @@ def main():
             os.replace(stage / name, results / name)
     print('\n' + '\n'.join(summary))
     if args.details:
-        for name in (ANSWERS[0], ANSWERS[1], ANSWERS[4]):
+        for name in ANSWERS:
             print(f'\n{name}:')
             for row in csv.DictReader(io.StringIO(exports[name])):
                 print('  ' + '; '.join(f'{key}: {value}' for key, value in row.items()))
