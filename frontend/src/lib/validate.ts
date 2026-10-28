@@ -1,4 +1,5 @@
-import type { DetailData, LoadedData, Meta, ReportData } from './types.ts';
+import { validateSupplemental } from './supplemental.ts';
+import type { DetailData, LoadedData, Meta, ReportData, SupplementalReport } from './types.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STATUSES = new Set(['approved', 'canceled', 'created', 'delivered', 'invoiced', 'processing', 'shipped', 'unavailable']);
@@ -88,11 +89,24 @@ function parseReports(root: Record<string, unknown>, meta: Meta): LoadedData {
   for (const m of monthly) {
     if (typeof m.month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(m.month) || months.has(m.month)) fail('Неверный или повторяющийся месяц отчёта.');
     months.add(m.month); integer(m.orders, 'monthly.orders'); integer(m.revenue, 'monthly.revenue');
+    if (m.orders === 0 && m.revenue !== 0) fail('Выручка месяца без заказов должна быть нулевой.');
   }
-  for (const s of sellers) { key(s.seller_id, 'seller_id'); nullableText(s.city, 'city'); nullableText(s.state, 'state'); for (const k of ['orders', 'units', 'revenue']) integer(s[k], `seller.${k}`); }
+  if (r.monthly_period !== undefined) {
+    const period = record(r.monthly_period, 'monthly_period');
+    if (monthly[0]?.month !== period.start || monthly.at(-1)?.month !== period.end) fail('Месячный отчёт не покрывает заявленный период.');
+  }
+  for (const s of sellers) { if ((s.units as number) < (s.orders as number)) fail('У продавца меньше единиц, чем заказов.'); key(s.seller_id, 'seller_id'); nullableText(s.city, 'city'); nullableText(s.state, 'state'); for (const k of ['orders', 'units', 'revenue']) integer(s[k], `seller.${k}`); }
   const cats = new Set<string>();
   for (const c of categories) { text(c.category_id, 'category_id'); text(c.category_code, 'category_code'); text(c.category_label, 'category_label'); nullableText(c.category_name_en, 'category_name_en'); integer(c.revenue, 'category.revenue'); if (cats.has(c.category_id)) fail('Дубликат категории.'); cats.add(c.category_id); }
   for (const k of ['orders', 'revenue', 'freight', 'units']) integer(avg[k], `average.${k}`);
+  if (avg.orders === 0 && (avg.units !== 0 || avg.revenue !== 0 || avg.freight !== 0)) fail('Ненулевые итоги без доставленных заказов.');
+  if ((avg.units as number) < (avg.orders as number)) fail('Доставленные заказы должны содержать минимум одну единицу.');
+  for (let i = 1; i < monthly.length; i++) {
+    const previous = monthly[i-1].month as string; const [year, month] = previous.split('-').map(Number);
+    const expected = `${year + (month === 12 ? 1 : 0)}-${String(month === 12 ? 1 : month + 1).padStart(2, '0')}`;
+    if (monthly[i].month !== expected) fail('Нарушен календарь месяцев отчёта.');
+  }
+  for (let i = 1; i < sellers.length; i++) if ((sellers[i].revenue as number) > (sellers[i-1].revenue as number)) fail('Рейтинг продавцов не упорядочен по выручке.');
   integer(buyers.total, 'buyers.total'); integer(buyers.repeat, 'buyers.repeat');
   if (buyers.repeat > buyers.total) fail('Повторных покупателей больше, чем всего покупателей.');
   const total = categories.reduce((a, c) => a + (c.revenue as number), 0);
@@ -102,9 +116,15 @@ function parseReports(root: Record<string, unknown>, meta: Meta): LoadedData {
     const additional = record(r.additional, 'additional');
     for (const [id, v] of Object.entries(additional)) {
       if (!['6', '7', '8', '9', '9_states', '9_methods', '10'].includes(id)) fail('Неизвестный номер дополнительного отчёта.');
-      const report = record(v, `additional.${id}`); text(report.source, 'source');
-      if (!Array.isArray(report.columns) || !report.columns.length || !report.columns.every(c => typeof c === 'string' && c.trim()) || new Set(report.columns).size !== report.columns.length) fail('Неверные заголовки дополнительного отчёта.');
-      if (!Array.isArray(report.rows) || report.rows.some(row => !Array.isArray(row) || row.length !== (report.columns as string[]).length || row.some(c => typeof c !== 'string'))) fail('Неверные строки дополнительного отчёта.');
+      try {
+        const report = record(v, `additional.${id}`); text(report.source, 'source');
+        if (report.snapshot_id !== undefined && report.snapshot_id !== meta.snapshot_id) fail('Дополнительный отчёт относится к другому снимку.');
+        if (!Array.isArray(report.columns) || !report.columns.length || !report.columns.every(c => typeof c === 'string' && c.trim()) || new Set(report.columns).size !== report.columns.length) fail('Неверные заголовки дополнительного отчёта.');
+        if (!Array.isArray(report.rows) || report.rows.some(row => !Array.isArray(row) || row.length !== (report.columns as string[]).length || row.some(c => typeof c !== 'string'))) fail('Неверные строки дополнительного отчёта.');
+        additional[id] = validateSupplemental(report as unknown as SupplementalReport, id);
+      } catch (error) {
+        additional[id] = { columns: [], rows: [], source: 'Опубликованный отчёт', error: error instanceof Error ? error.message : 'Некорректный отчёт' };
+      }
     }
   }
   return { mode: 'reports', data: { meta, mode: 'reports', reports: r } as unknown as ReportData };

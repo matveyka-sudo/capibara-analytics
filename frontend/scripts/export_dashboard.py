@@ -60,6 +60,7 @@ def reports():
                  'currency_code': 'BRL'},
         'reports': {
             'additional': additional,
+            'monthly_period': {'start': monthly[0]['month'][:7], 'end': monthly[-1]['month'][:7]} if monthly else None,
             'monthly': [{'month': r['month'][:7], 'orders': int(r['order_count']), 'revenue': cents(r['revenue'])} for r in monthly],
             'sellers': [{'seller_id': str(UUID(r['seller_id'])), 'city': r['seller_city'] or None, 'state': r['seller_state'] or None,
                          'orders': int(r['order_count']), 'units': int(r['item_unit_count']), 'revenue': cents(r['revenue'])} for r in sellers],

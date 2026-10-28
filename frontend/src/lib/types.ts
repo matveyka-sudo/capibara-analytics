@@ -18,11 +18,11 @@ export interface SellerRow extends Seller { orders: number; units: number; reven
 export interface CategoryRow extends Category { revenue: number; share: number | null }
 export interface OrderSummary { orders: number; revenue: number; freight: number; units: number }
 export interface Buyers { total: number; repeat: number }
-export interface SupplementalReport { columns: string[]; rows: string[][]; source: string }
+export interface SupplementalReport { columns: string[]; rows: string[][]; source: string; error?: string }
 export interface ReportData {
   meta: Meta;
   mode: 'reports';
-  reports: { monthly: MonthRow[]; sellers: SellerRow[]; average: OrderSummary; buyers: Buyers; categories: CategoryRow[]; additional?: Record<string, SupplementalReport> };
+  reports: { monthly_period?: Range; monthly: MonthRow[]; sellers: SellerRow[]; average: OrderSummary; buyers: Buyers; categories: CategoryRow[]; additional?: Record<string, SupplementalReport> };
 }
 export type LoadedData = { mode: 'detail'; data: DetailData } | { mode: 'reports'; data: ReportData };
 export interface Range { start: string; end: string }

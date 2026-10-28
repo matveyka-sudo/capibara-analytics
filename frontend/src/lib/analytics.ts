@@ -4,6 +4,7 @@ import { validDate } from './validate.ts';
 export const ALL: Range = { start: '', end: '' };
 export const MONTHS: Range = { start: '2016-09', end: '2018-08' };
 export function validRange(r: Range, month = false): boolean {
+  if (month && (!r.start || !r.end)) return false;
   const check = (s: string) => !s || validDate(month ? `${s}-01` : s);
   if (!check(r.start) || !check(r.end) || (r.start && r.end && r.start > r.end)) return false;
   if (month && r.start && r.end) {
@@ -69,4 +70,10 @@ export function categorySales(ix: Index, range: Range, seller = ''): CategoryRow
   const sums = new Map(ix.data.categories.map(c => [c.category_id, 0])); let total = 0;
   for (const i of ix.deliveredItems) if ((!seller || seller === i.seller_id) && inRange(ix.orders.get(i.order_id)!.purchased_at, range)) { sums.set(i.category_id, sums.get(i.category_id)! + i.price_cents); total += i.price_cents; }
   return ix.data.categories.map(c => ({ ...c, revenue: sums.get(c.category_id)!, share: total ? sums.get(c.category_id)! / total : null })).sort((a, b) => b.revenue - a.revenue || a.category_id.localeCompare(b.category_id));
+}
+
+export function rangeCovered(range: Range, ix: Index, month = false) {
+  const min = ix.data.meta.source_purchase_date_min!.slice(0, month ? 7 : 10);
+  const max = ix.data.meta.source_purchase_date_max!.slice(0, month ? 7 : 10);
+  return (!range.start || range.start >= min) && (!range.end || range.end <= max);
 }
