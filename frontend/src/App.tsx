@@ -17,10 +17,10 @@ const QUESTIONS = [
     { id: 4, label: 'Повторные заказы площадки', question: 'Сколько покупателей оформили второй заказ?', note: 'Все статусы заказов. Это повторные заказы внутри периода, а не удержание.' },
     { id: 5, label: 'Категории товаров', question: 'Какие категории формируют выручку?', note: 'Доставленные заказы. Поиск по таблице не меняет знаменатель долей.' },
     { id: 6, label: 'История цены товара', question: 'Как менялась цена товара с наибольшим числом разных цен?', note: 'История одного выбранного товара: дата, цена и проданные единицы.' },
-    { id: 7, label: 'Доставка по штатам', question: 'Как отличаются сроки доставки и опоздания по штатам?', note: 'Только штаты покупателей с числом заказов не меньше 500.' },
+    { id: 7, label: 'Доставка по штатам', question: 'Как отличаются сроки доставки и опоздания по штатам?', note: 'Штаты с минимум 500 доставленными заказами. Срок и опоздания считаются по соответствующим пригодным датам.' },
     { id: 8, label: 'Воронка статусов', question: 'Сколько заказов находится в каждом статусе?', note: 'Все статусы. Отдельно показываются заказы без товарных позиций.' },
     { id: 9, label: 'Оплата и рассрочка', question: 'Какими способами платят и какую рассрочку выбирают?', note: 'По штатам покупателей за 2018 год и по способам оплаты за весь снимок.' },
-    { id: 10, label: 'Оценка и срок доставки', question: 'Как связана оценка покупателя со сроком доставки?', note: 'Для оценок от 1 до 5: заказы, средний срок доставки и доля опозданий.' },
+    { id: 10, label: 'Оценка и срок доставки', question: 'Как связана оценка покупателя со сроком доставки?', note: 'Доставленные заказы, один выбранный в SQL отзыв на заказ. Срок и опоздания считаются по соответствующим пригодным датам.' },
 ];
 const PENDING_HEADERS: Record<number, string[]> = {
     6: ['Дата', 'Цена', 'Продано единиц'],
@@ -95,7 +95,7 @@ export default function App() {
         if (additional?.error)
             return <div className="notice error" role="alert">{additional.error}</div>;
         if (additional)
-            return <><p className="source-note">Источник: {additional.source} (схема проверена; происхождение локального CSV не подтверждается автоматически). Показаны значения из файла, расчёт в браузере не выполняется.</p><DataTable name={`Вопрос ${questionId}`} headers={additional.columns.map(c => columnLabel(c) + (c === 'amount' || c === 'price' ? `, ${currency}` : ''))} rows={supplementalCells(additional, currency)}/></>;
+            return <><p className="source-note">Источник: {additional.source}{localReports[reportKey] ? ' (локальный CSV; происхождение не подтверждено)' : ' · сохранённый результат SQL'}. Показаны значения из файла, расчёт в браузере не выполняется.</p><DataTable name={`Вопрос ${questionId}`} headers={additional.columns.map(c => columnLabel(c) + (c === 'amount' || c === 'price' ? `, ${currency}` : ''))} rows={supplementalCells(additional, currency)}/></>;
         if (questionId === 8 && ix) {
             const groups = new Map<string, {
                 orders: number;
@@ -129,7 +129,7 @@ export default function App() {
     {csvError && <p className="error-text" role="alert">{csvError}</p>}
   </>}
   {feature === 'seller' && <><PageHeading title="Профиль продавца" description="Продажи выбранного продавца, его город и штат."/><SearchSelect label="Продавец" options={sellerOptions} value={profileSeller} onChange={setProfileSeller} allLabel="Выберите продавца" disabled={!ready}/>{!ix && ready && <p className="source-note">Доступны продавцы из сохранённого топ-10. Подробная динамика и ассортимент требуют отдельной выгрузки.</p>}{profileSeller && ready ? <SellerProfile id={profileSeller} ix={ix} summary={reports?.sellers.find(s => s.seller_id === profileSeller)} currency={currency}/> : <div className="empty">Выберите продавца, чтобы посмотреть показатели.</div>}</>}
-  {feature === 'canceled' && <><PageHeading title="Отмены и недоступность" description="Два статуса считаются отдельно. Это отмены заказов, а не возвраты после получения."/>{ix ? <CancellationTable ix={ix} currency={currency}/> : <PendingFeature text="В пяти базовых отчётах нет статистики отмен. Нужен подробный снимок или результат дополнительного SQL-запроса."/>}<p className="source-note">Сравнение регионов покупателей появится после подключения регионального отчёта. Стоимость известных позиций не равна доказанной потере выручки.</p></>}
+  {feature === 'canceled' && <><PageHeading title="Отмены и недоступность" description="Два статуса считаются отдельно. Это отмены заказов, а не возвраты после получения."/>{ix ? <CancellationTable ix={ix} currency={currency}/> : reports?.additional?.['8'] && !reports.additional['8'].error ? <CancellationSummary report={reports.additional['8']}/> : <PendingFeature text="В пяти базовых отчётах нет статистики отмен. Нужен подробный снимок или результат дополнительного SQL-запроса."/>}<p className="source-note">Сравнение регионов покупателей появится после подключения регионального отчёта. Стоимость известных позиций не равна доказанной потере выручки.</p></>}
   {feature === 'delivery' && <><PageHeading title="Доставка под контролем" description="Стоимость доставки и отчёты о сроках."/>{ready && allSummary ? <KeyValues name="Стоимость доставки" rows={[
                     [`Средняя доставка на доставленный заказ, ${currency}`, rawCell(allSummary.orders ? allSummary.freight / allSummary.orders / 100 : null, `${money(allSummary.orders ? allSummary.freight / allSummary.orders : null)} ${currency}`)],
                     ['Доля доставки в стоимости покупки, %', rawCell(allSummary.revenue + allSummary.freight ? allSummary.freight / (allSummary.revenue + allSummary.freight) * 100 : null, percent(allSummary.revenue + allSummary.freight ? allSummary.freight / (allSummary.revenue + allSummary.freight) : null))],
@@ -230,4 +230,15 @@ function SellerRepeat({ ix, id, range }: {
     return <KeyValues name="Возвращаются к продавцу" rows={[
             ['Покупателей с доставленным заказом', stats.total], ['Покупателей минимум с двумя заказами', stats.repeat], ['Доля повторных покупателей продавца, %', rawCell(stats.total ? stats.repeat / stats.total * 100 : null, percent(stats.total ? stats.repeat / stats.total : null))],
         ]}/>;
+}
+
+function CancellationSummary({ report }: { report: SupplementalReport }) {
+    const rows = report.rows.filter(row => ['canceled', 'unavailable'].includes(row[report.columns.indexOf('status')]));
+    const data = rows.map(row => {
+        const value = (column: string) => row[report.columns.indexOf(column)];
+        const orders = Number(value('orders'));
+        const without = Number(value('without_items'));
+        return [STATUS_LABELS[value('status')], orders, rawCell(Number(value('share_pct')), `${number(Number(value('share_pct')))} %`), without, orders - without];
+    });
+    return <><DataTable name="Отмены и недоступность" headers={['Статус', 'Заказы', 'Доля всех заказов, %', 'Без позиций', 'С известными позициями']} rows={data} numeric={[1,2,3,4]}/><p className="source-note">Источник: {report.source}. Количества и доли подключены. Стоимость позиций отсутствует в этом отчёте и не заменяется нулём.</p></>;
 }

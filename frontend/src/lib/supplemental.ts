@@ -3,9 +3,9 @@ import { type Cell } from './table.ts';
 const aliases: Record<string, string[]> = {
     product_id: ['product_id'], date: ['date', 'day', 'sale_date', 'purchase_date', 'purchased_on'], price: ['price', 'unit_price'], units: ['units', 'unit_count', 'item_count', 'quantity'],
     state: ['state', 'customer_state', 'buyer_state'], orders: ['orders', 'order_count'], avg_delivery_days: ['average_delivery_days', 'avg_delivery_days', 'average_days', 'avg_delivery_time_days'],
-    late_pct: ['late_share_pct', 'late_pct', 'late_order_share_pct', 'late_percentage', 'late_delivery_pct'], status: ['status', 'order_status'], share_pct: ['share_pct', 'order_share_pct', 'percentage'],
+    late_pct: ['late_share_pct', 'late_pct', 'late_order_share_pct', 'late_percentage', 'late_delivery_pct', 'late_rate_percent'], status: ['status', 'order_status'], share_pct: ['share_pct', 'order_share_pct', 'percentage', 'order_share_percent'],
     without_items: ['orders_without_items', 'without_items', 'orders_without_items_count'], payment_type: ['payment_type'], payments: ['payments', 'payment_count'], amount: ['payment_value', 'total_amount', 'amount', 'total_payment_value'],
-    avg_installments: ['average_installments', 'avg_installments'], score: ['score', 'review_score'],
+    avg_installments: ['average_installments', 'avg_installments', 'average_installment_count'], score: ['score', 'review_score'],
 };
 const schemas: Record<string, string[]> = {
     '6': ['product_id', 'date', 'price', 'units'], '7': ['state', 'orders', 'avg_delivery_days', 'late_pct'], '8': ['status', 'orders', 'share_pct', 'without_items'],

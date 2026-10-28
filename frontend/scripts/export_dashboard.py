@@ -2,6 +2,7 @@
 """Read-only export from published core; alternatively package saved SQL answers."""
 import argparse
 import csv
+import re
 import hashlib
 import json
 import os
@@ -37,7 +38,7 @@ def reports():
     digest = hashlib.sha256(b''.join(p.read_bytes() for p in sorted(RESULTS.glob('*.csv')))).hexdigest()[:20]
     additional = {}
     for number in range(6, 11):
-        matches = sorted(RESULTS.glob(f'{number:02d}_*.csv'))
+        matches = sorted(path for path in RESULTS.glob('*.csv') if re.match(rf'^{number:02d}(?:[ab])?_.*\.csv$', path.name))
         if number != 9 and len(matches) > 1:
             raise ValueError(f'У отчёта {number} несколько CSV: выберите один итоговый файл.')
         for path in matches:
@@ -47,9 +48,14 @@ def reports():
                 raise ValueError(f'Некорректный CSV отчёта {number}.')
             key = str(number)
             if number == 9:
-                key = '9_methods' if 'payment_type' in table[0] or 'method' in path.stem else '9_states'
+                key = '9_methods' if 'payment_type' in table[0] or any(word in path.stem for word in ('method', 'by_type')) else '9_states'
             if key in additional:
                 raise ValueError(f'Несколько CSV для среза {key}.')
+            if number == 6 and 'product_id' not in table[0]:
+                selected = re.search(r'^6\. Товар: ([0-9a-f]{32});', report, re.MULTILINE)
+                if not selected:
+                    raise ValueError('В отчёте проверки нет ID выбранного товара для истории цены.')
+                table = [['product_id', *table[0]], *[[selected.group(1), *row] for row in table[1:]]]
             additional[key] = {'columns': table[0], 'rows': table[1:], 'source': path.name}
     return {
         'mode': 'reports',

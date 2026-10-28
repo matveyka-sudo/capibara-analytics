@@ -96,3 +96,20 @@ test('сохранённые реальные SQL-отчёты сходятся 
   assert.equal(r.average.freight, 220296554); assert.equal(r.buyers.total, 96096); assert.equal(r.buyers.repeat, 2997);
   assert.equal(r.categories.length, 74); assert.equal(r.categories.find(c => c.category_code === 'category:unknown')!.revenue, 17072663);
 });
+
+test('все готовые ответы блока Б загружаются с фактическими SQL-заголовками', () => {
+  const parsed = parseData(JSON.parse(readFileSync(new URL('../../public/data/reports.json', import.meta.url), 'utf8')));
+  assert.equal(parsed.mode, 'reports');
+  if (parsed.mode !== 'reports') return;
+  const additional = parsed.data.reports.additional!;
+  for (const key of ['6','7','8','9_states','9_methods','10']) {
+    assert.ok(additional[key], `Нет отчёта ${key}`);
+    assert.equal(additional[key].error, undefined, `Ошибка отчёта ${key}`);
+    assert.ok(additional[key].rows.length > 0);
+  }
+  const sum = (key: string, column: string) => additional[key].rows.reduce((n,r) => n + Number(r[additional[key].columns.indexOf(column)]), 0);
+  assert.equal(sum('6','units'), 151);
+  assert.equal(sum('8','orders'), 99441);
+  assert.equal(sum('9_states','payments'), 56015);
+  assert.equal(sum('9_methods','payments'), 103886);
+});
